@@ -10,10 +10,9 @@ disease_symptoms = {
     "Psoriasis": ["itchy", "scaly", "peeling", "burning"],
     "Flu": ["fever", "chills", "cough", "fatigue"],
     "Cold": ["runny", "sneeze", "congestion", "cough"],
-    # Add more diseases and symptoms here
 }
 
-# === Load the trained HMM model once ===
+# === Load HMM model once ===
 file_path = "Symptom2Disease.csv"
 model, states, observations = train_hmm(file_path)
 
@@ -25,7 +24,6 @@ conversation_state = {
     "user_symptoms": []
 }
 
-# === Handle user input and bot response ===
 def on_send_button_click():
     user_input = user_entry.get().strip()
     if user_input == "":
@@ -34,50 +32,59 @@ def on_send_button_click():
     chat_window.config(state='normal')
     chat_window.insert(tk.END, f"You: {user_input}\n")
 
-    # Tokenize and filter only valid symptoms
+    # Tokenize and check for known symptoms
     input_tokens = word_tokenize(user_input.lower())
     valid_tokens = [token for token in input_tokens if token in observations]
 
-    # Add new unique symptoms to the conversation state
+    # Add new symptoms to the list
     for token in valid_tokens:
         if token not in conversation_state["user_symptoms"]:
             conversation_state["user_symptoms"].append(token)
 
-    # === Follow-up handling ===
-    if conversation_state["awaiting_followup"]:
+    bot_reply = ""
+
+    # === If user types "done", trigger diagnosis ===
+    if user_input.lower() in ["done", "diagnose me", "ready"]:
+        if len(conversation_state["user_symptoms"]) < 3:
+            bot_reply = "I still need more information. Please describe at least 3 symptoms."
+        else:
+            predicted = predict_disease(model, states, observations, conversation_state["user_symptoms"])
+            conversation_state["suspected_disease"] = predicted
+
+            expected = disease_symptoms.get(predicted, [])
+            missing = [s for s in expected if s not in conversation_state["user_symptoms"]]
+
+            if missing:
+                conversation_state["awaiting_followup"] = True
+                conversation_state["missing_symptoms"] = missing
+                bot_reply = f"Based on what you've told me, you might have {predicted}. Do you also experience any of these: {', '.join(missing)}?"
+            else:
+                bot_reply = f"Based on your symptoms, you likely have {predicted}."
+                conversation_state["user_symptoms"] = []
+
+    # === Follow-up response phase ===
+    elif conversation_state["awaiting_followup"]:
         confirmed = [
             s for s in conversation_state["missing_symptoms"]
             if any(s in word for word in valid_tokens)
         ]
         if confirmed:
-            bot_reply = f"Thanks! That confirms more symptoms. Based on your input, you likely have {conversation_state['suspected_disease']}."
+            bot_reply = f"Thanks! That confirms more symptoms. You likely have {conversation_state['suspected_disease']}."
         else:
-            bot_reply = f"Thanks. Since you're not showing those symptoms, it may not be {conversation_state['suspected_disease']}. Please consider seeing a healthcare professional."
+            bot_reply = f"Thanks. If you're not experiencing those, it might not be {conversation_state['suspected_disease']}. Consider consulting a professional."
 
-        # Reset state
+        # Reset
         conversation_state["awaiting_followup"] = False
         conversation_state["suspected_disease"] = None
         conversation_state["missing_symptoms"] = []
         conversation_state["user_symptoms"] = []
 
-    # === Initial prediction stage ===
+    # === Symptom collecting stage ===
     else:
-        unique_symptoms = conversation_state["user_symptoms"]
-        if len(unique_symptoms) < 3:
-            bot_reply = "Could you please describe a few more symptoms so I can better understand your condition?"
+        if valid_tokens:
+            bot_reply = "Got it. Let me know when you're ready for a diagnosis by typing 'done'."
         else:
-            predicted = predict_disease(model, states, observations, unique_symptoms)
-            conversation_state["suspected_disease"] = predicted
-
-            expected_symptoms = disease_symptoms.get(predicted, [])
-            missing = [sym for sym in expected_symptoms if sym not in unique_symptoms]
-
-            if missing:
-                conversation_state["awaiting_followup"] = True
-                conversation_state["missing_symptoms"] = missing
-                bot_reply = f"Based on your symptoms, you might have {predicted}. Do you also experience any of the following: {', '.join(missing)}?"
-            else:
-                bot_reply = f"Based on your symptoms, you might have {predicted}."
+            bot_reply = "I didn't recognize any symptoms. Can you describe how you're feeling using different words?"
 
     chat_window.insert(tk.END, f"Bot: {bot_reply}\n")
     chat_window.config(state='disabled')
