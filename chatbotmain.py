@@ -1,8 +1,4 @@
 import tkinter as tk
-from nltk.tokenize import word_tokenize
-import nltk
-# nltk.download('punkt')
-
 from biobert_model import train_biobert, predict_disease
 
 # === Disease-Symptom Map for Follow-up Questions ===
