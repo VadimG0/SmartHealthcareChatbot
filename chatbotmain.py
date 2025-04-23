@@ -145,6 +145,10 @@ def clear_chat():
     chat_window.delete(1.0, tk.END)
     chat_window.config(state='disabled')
     status_label.config(text="Chat cleared")
+    conversation_state["awaiting_followup"] = False
+    conversation_state["suspected_disease"] = None
+    conversation_state["missing_symptoms"] = []
+    conversation_state["user_text"] = ""
 
 def on_entry_focus_in(event):
     """Handle entry focus in for placeholder."""
